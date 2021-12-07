@@ -380,7 +380,7 @@ class GPT2Block(nn.Module):
         self.attn = GPT2Attention(config, layer_idx=layer_idx)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
-        print(config.add_cross_attention)
+        print(config)
 
         if config.add_cross_attention:
             self.crossattention = GPT2Attention(config, is_cross_attention=True)
