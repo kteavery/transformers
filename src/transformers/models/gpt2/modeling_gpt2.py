@@ -223,10 +223,12 @@ class GPT2Attention(nn.Module):
 
         attn_output = torch.matmul(attn_weights, value)
 
-        # print("attn_output")
-        # print(attn_output)
-        # print("attn_weights")
-        # print(attn_weights)
+        print("attn_output")
+        print(np.array(attn_output).shape)
+        print(attn_output[0])
+        print("attn_weights")
+        print(np.array(attn_weights).shape)
+        print(attn_weights[0])
 
         return attn_output, attn_weights
 
