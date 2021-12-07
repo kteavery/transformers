@@ -156,6 +156,8 @@ class GPT2Attention(nn.Module):
 
         self.scale_attn_weights = config.scale_attn_weights
         self.is_cross_attention = is_cross_attention
+        print("self.is_cross_attention:")
+        print(self.is_cross_attention)
 
         # Layer-wise attention scaling, reordering, and upcasting
         self.scale_attn_by_inverse_layer_idx = config.scale_attn_by_inverse_layer_idx
@@ -220,6 +222,11 @@ class GPT2Attention(nn.Module):
             attn_weights = attn_weights * head_mask
 
         attn_output = torch.matmul(attn_weights, value)
+
+        print("attn_output")
+        print(attn_output)
+        print("attn_weights")
+        print(attn_weights)
 
         return attn_output, attn_weights
 
