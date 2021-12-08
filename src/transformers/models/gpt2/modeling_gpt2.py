@@ -156,8 +156,8 @@ class GPT2Attention(nn.Module):
 
         self.scale_attn_weights = config.scale_attn_weights
         self.is_cross_attention = is_cross_attention
-        print("self.is_cross_attention:")
-        print(self.is_cross_attention)
+        # print("self.is_cross_attention:")
+        # print(self.is_cross_attention)
 
         # Layer-wise attention scaling, reordering, and upcasting
         self.scale_attn_by_inverse_layer_idx = config.scale_attn_by_inverse_layer_idx
@@ -205,6 +205,10 @@ class GPT2Attention(nn.Module):
             # if only "normal" attention layer implements causal mask
             query_length, key_length = query.size(-2), key.size(-2)
             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
+            print("causal_mask")
+            print(causal_mask)
+            # causal_prefix_mask = causal_mask + 
+
             attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
         if attention_mask is not None:
@@ -224,12 +228,14 @@ class GPT2Attention(nn.Module):
         attn_output = torch.matmul(attn_weights, value)
 
         # import numpy as np
-        print("attn_output")
+        # print("attn_output")
         # print(np.array(attn_output).shape)
-        print(attn_output[0][0][0])
-        print("attn_weights")
+        # print(attn_output[0][0][1])
+        # print(attn_output[0][0][2])
+        # print("attn_weights")
         # print(np.array(attn_weights).shape)
-        print(attn_weights[0][0][0])
+        # print(attn_weights[0][0][1])
+        # print(attn_weights[0][0][2])
 
         return attn_output, attn_weights
 
@@ -383,7 +389,7 @@ class GPT2Block(nn.Module):
         self.attn = GPT2Attention(config, layer_idx=layer_idx)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
-        print(config)
+        # print(config)
 
         if config.add_cross_attention:
             self.crossattention = GPT2Attention(config, is_cross_attention=True)
