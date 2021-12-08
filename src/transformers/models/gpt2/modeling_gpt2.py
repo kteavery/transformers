@@ -281,7 +281,7 @@ class GPT2Attention(nn.Module):
             
             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
             prefix = torch.logical_not(attention_mask.bool())[0][0][0]
-            print("mask size")
+            print("mask size - _upcast_and_reordered_attn")
             print(causal_mask.size())
             # print(causal_mask)
             # print(attention_mask.size())
