@@ -218,7 +218,7 @@ class GPT2Attention(nn.Module):
                 # print(expanded_prefix.size())
                 causal_mask = causal_mask + expanded_prefix
                 # print(causal_prefix_mask)
-                print(causal_mask)
+                # print(causal_mask)
 
             attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
