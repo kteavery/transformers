@@ -937,6 +937,7 @@ class GPT2Model(GPT2PreTrainedModel):
                     encoder_hidden_states,
                     encoder_attention_mask,
                 )
+                print(outputs)
             else:
                 outputs = block(
                     hidden_states,
