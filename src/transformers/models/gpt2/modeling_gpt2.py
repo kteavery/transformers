@@ -843,8 +843,9 @@ class GPT2Model(GPT2PreTrainedModel):
                 raise ValueError("batch_size has to be defined and > 0")
             attention_mask = attention_mask.view(batch_size, -1)
             if prefix_mask == None:
-                print("attention")
-                print(attention_mask)
+                # print("attention")
+                # print(attention_mask)
+                prefix_mask = attention_mask
             prefix_mask = prefix_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
