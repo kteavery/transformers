@@ -205,13 +205,15 @@ class GPT2Attention(nn.Module):
             # if only "normal" attention layer implements causal mask
             query_length, key_length = query.size(-2), key.size(-2)
             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
-            #attention_mask.bool()
+            prefix = torch.logical_not(attention_mask.bool())[0][0][0]
             print("causal_mask")
             print(causal_mask.size())
             print(causal_mask)
             print(attention_mask.size())
-            print(attention_mask.bool())
-            # causal_prefix_mask = causal_mask + 
+            print(prefix)
+            expanded_prefix = prefix.repeat(causal_mask.size([3]))
+            print(expanded_prefix.size())
+            causal_prefix_mask = causal_mask + expanded_prefix
 
             attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
