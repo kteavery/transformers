@@ -206,7 +206,7 @@ class GPT2Attention(nn.Module):
             query_length, key_length = query.size(-2), key.size(-2)
             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
             prefix = torch.logical_not(prefix_mask.bool())[0][0][0]
-            print(prefix)
+            # print(prefix)
             # print("mask size")
             # print(causal_mask.size())
             # print(causal_mask)
@@ -842,6 +842,9 @@ class GPT2Model(GPT2PreTrainedModel):
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
             attention_mask = attention_mask.view(batch_size, -1)
+            if prefix_mask == None:
+                print("attention")
+                print(attention_mask)
             prefix_mask = prefix_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
