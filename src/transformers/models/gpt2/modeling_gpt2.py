@@ -191,7 +191,7 @@ class GPT2Attention(nn.Module):
         self.num_heads = self.num_heads - len(heads)
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def _attn(self, query, key, value, attention_mask=None, head_mask=None):
+    def _attn(self, query, key, value, attention_mask=None, prefix_mask=None, head_mask=None):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         if self.scale_attn_weights:
@@ -205,23 +205,24 @@ class GPT2Attention(nn.Module):
             # if only "normal" attention layer implements causal mask
             query_length, key_length = query.size(-2), key.size(-2)
             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
-            prefix = torch.logical_not(attention_mask.bool())[0][0][0]
-            print("mask size")
-            print(causal_mask.size())
+            prefix = torch.logical_not(prefix_mask.bool())[0][0][0]
+            # print("mask size")
+            # print(causal_mask.size())
             # print(causal_mask)
             # print(attention_mask.size())
             # print(prefix)
             # print(causal_mask.size()[3])
-            expanded_prefix = prefix.repeat(causal_mask.size()[3], 1)
-            print(expanded_prefix.size())
-            causal_prefix_mask = causal_mask + expanded_prefix
-            # print(causal_prefix_mask)
+            if causal_mask.size()[3] == causal_mask.size()[2]:
+                expanded_prefix = prefix.repeat(causal_mask.size()[3], 1)
+                # print(expanded_prefix.size())
+                causal_mask = causal_mask + expanded_prefix
+                # print(causal_prefix_mask)
 
-            attn_weights = torch.where(causal_prefix_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
+            attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
-        # if attention_mask is not None:
-        #     # Apply the attention mask
-        #     attn_weights = attn_weights + attention_mask
+        if attention_mask is not None:
+            # Apply the attention mask
+            attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -247,7 +248,7 @@ class GPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
-    def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None, head_mask=None):
+    def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None, prefix_mask=None, head_mask=None):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
         bsz, num_heads, q_seq_len, dk = query.size()
         _, _, k_seq_len, _ = key.size()
@@ -280,23 +281,24 @@ class GPT2Attention(nn.Module):
             # causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
             
             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
-            prefix = torch.logical_not(attention_mask.bool())[0][0][0]
-            print("mask size - _upcast_and_reordered_attn")
-            print(causal_mask.size())
+            prefix = torch.logical_not(prefix_mask.bool())[0][0][0]
+            # print("mask size - _upcast_and_reordered_attn")
+            # print(causal_mask.size())
             # print(causal_mask)
             # print(attention_mask.size())
             # print(prefix)
             # print(causal_mask.size()[3])
-            expanded_prefix = prefix.repeat(causal_mask.size()[3], 1)
-            print(expanded_prefix.size())
-            causal_prefix_mask = causal_mask + expanded_prefix
+            if causal_mask.size()[3] == causal_mask.size()[2]:
+                expanded_prefix = prefix.repeat(causal_mask.size()[3], 1)
+                # print(expanded_prefix.size())
+                causal_mask = causal_mask + expanded_prefix
 
-            attn_weights = torch.where(causal_prefix_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
+            attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
 
-        # if attention_mask is not None:
-        #     # Apply the attention mask
-        #     attn_weights = attn_weights + attention_mask
+        if attention_mask is not None:
+            # Apply the attention mask
+            attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -335,6 +337,7 @@ class GPT2Attention(nn.Module):
         hidden_states,
         layer_past=None,
         attention_mask=None,
+        prefix_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
@@ -369,9 +372,9 @@ class GPT2Attention(nn.Module):
             present = None
 
         if self.reorder_and_upcast_attn:
-            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
+            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, prefix_mask, head_mask)
         else:
-            attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+            attn_output, attn_weights = self._attn(query, key, value, attention_mask, prefix_mask, head_mask)
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
         attn_output = self.c_proj(attn_output)
@@ -424,6 +427,7 @@ class GPT2Block(nn.Module):
         hidden_states,
         layer_past=None,
         attention_mask=None,
+        prefix_mask=None, 
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
@@ -436,6 +440,7 @@ class GPT2Block(nn.Module):
             hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
+            prefix_mask=prefix_mask,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -457,6 +462,7 @@ class GPT2Block(nn.Module):
             cross_attn_outputs = self.crossattention(
                 hidden_states,
                 attention_mask=attention_mask,
+                prefix_mask=prefix_mask, 
                 head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
@@ -783,6 +789,7 @@ class GPT2Model(GPT2PreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        prefix_mask=None, 
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
@@ -834,12 +841,14 @@ class GPT2Model(GPT2PreTrainedModel):
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
             attention_mask = attention_mask.view(batch_size, -1)
+            prefix_mask = prefix_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
             attention_mask = attention_mask[:, None, None, :]
+            prefix_mask = prefix_mask[:, None, None, :]
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
@@ -848,6 +857,9 @@ class GPT2Model(GPT2PreTrainedModel):
             # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * -10000.0
+
+            prefix_mask = prefix_mask.to(dtype=self.dtype)  # fp16 compatibility
+            prefix_mask = (1.0 - prefix_mask) * -10000.0
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -894,6 +906,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 # Ensure that attention_mask is always on the same device as hidden_states
                 if attention_mask is not None:
                     attention_mask = attention_mask.to(hidden_states.device)
+                    prefix_mask = prefix_mask.to(hidden_states.device)
                 if isinstance(head_mask, torch.Tensor):
                     head_mask = head_mask.to(hidden_states.device)
             if output_hidden_states:
@@ -919,6 +932,7 @@ class GPT2Model(GPT2PreTrainedModel):
                     hidden_states,
                     None,
                     attention_mask,
+                    # prefix_mask,
                     head_mask[i],
                     encoder_hidden_states,
                     encoder_attention_mask,
@@ -928,6 +942,7 @@ class GPT2Model(GPT2PreTrainedModel):
                     hidden_states,
                     layer_past=layer_past,
                     attention_mask=attention_mask,
+                    prefix_mask=prefix_mask,
                     head_mask=head_mask[i],
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
@@ -1021,7 +1036,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, prefix_mask=None, past=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past:
@@ -1046,6 +1061,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             "use_cache": kwargs.get("use_cache"),
             "position_ids": position_ids,
             "attention_mask": attention_mask,
+            "prefix_mask": prefix_mask,
             "token_type_ids": token_type_ids,
         }
 
@@ -1061,6 +1077,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        prefix_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
@@ -1085,6 +1102,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            prefix_mask=prefix_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
@@ -1194,7 +1212,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, prefix_mask=None, past=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past:
@@ -1220,6 +1238,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             "use_cache": kwargs.get("use_cache"),
             "position_ids": position_ids,
             "attention_mask": attention_mask,
+            "prefix_mask": prefix_mask,
             "token_type_ids": token_type_ids,
         }
 
@@ -1230,6 +1249,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        prefix_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
@@ -1289,6 +1309,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            prefix_mask=prefix_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
@@ -1392,6 +1413,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        prefix_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
@@ -1414,6 +1436,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            prefix_mask=prefix_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
@@ -1524,6 +1547,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        prefix_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
@@ -1546,6 +1570,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            prefix_mask=prefix_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
