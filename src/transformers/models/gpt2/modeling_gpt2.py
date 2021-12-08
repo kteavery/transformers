@@ -211,7 +211,8 @@ class GPT2Attention(nn.Module):
             print(causal_mask)
             print(attention_mask.size())
             print(prefix)
-            expanded_prefix = prefix.repeat(1, causal_mask.size()[3])
+            print(causal_mask.size()[3])
+            expanded_prefix = prefix.repeat(causal_mask.size()[3], 1)
             print(expanded_prefix.size())
             causal_prefix_mask = causal_mask + expanded_prefix
 
