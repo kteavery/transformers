@@ -216,7 +216,7 @@ class GPT2Attention(nn.Module):
             if causal_mask.size()[3] == causal_mask.size()[2]:
                 expanded_prefix = prefix.repeat(causal_mask.size()[3], 1)
                 # print(expanded_prefix.size())
-                causal_mask = causal_mask + expanded_prefix
+                # causal_mask = causal_mask + expanded_prefix
                 # print(causal_prefix_mask)
                 # print(causal_mask)
 
@@ -293,7 +293,7 @@ class GPT2Attention(nn.Module):
             if causal_mask.size()[3] == causal_mask.size()[2]:
                 expanded_prefix = prefix.repeat(causal_mask.size()[3], 1)
                 # print(expanded_prefix.size())
-                causal_mask = causal_mask + expanded_prefix
+                # causal_mask = causal_mask + expanded_prefix
 
             attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
